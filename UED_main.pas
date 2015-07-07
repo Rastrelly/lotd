@@ -414,6 +414,9 @@ type
     dcmaingame: TGLDummyCube;
     monster_sign: TGLHUDSprite;
     //my procedures
+    function CheckJournalUnlocked(j:integer):boolean;
+    procedure ChangeJPage(k:integer);
+    procedure OpenJPos(jpage:integer);
     procedure UpdateJournal(j:integer);
     procedure ClearJournal;
     procedure LoadGame;
@@ -594,7 +597,7 @@ const
   numsources = 1001;
   music = 0;
   sound = 1;
-  mb=54; //<-buttons limit
+  mb=58; //<-buttons limit
   lskmod=800;
   toteff=24;
 
@@ -3285,6 +3288,39 @@ begin
       n1:=rvi;
 
     UpdateJournal(n1);
+
+  end;
+
+  if fname='CheckJournalUnlocked' then
+  begin
+
+    gf:=true;
+
+    //journal id
+    sp[1]:=readnextword(stext,cp);
+    processparam(sp[1],1,1);
+    if ((rvs='@') and (rvi=-1)) then
+      n1:=iv[ip[1]]
+    else
+      n1:=rvi;
+
+    //varno
+    sp[2]:=readnextword(stext,cp);
+    processparam(sp[2],2,1);
+    if ((rvs='@') and (rvi=-1)) then
+      n2:=iv[ip[2]]
+    else
+      n2:=rvi;
+
+
+    if CheckJournalUnlocked(n1)=true then
+    begin
+      iv[n2]:=1;
+    end
+    else
+    begin
+      iv[n2]:=0;
+    end;
 
   end;
 
@@ -7169,24 +7205,35 @@ begin
   end;
 end;
 
+
+function TForm1.CheckJournalUnlocked(j:integer):boolean;
+var n,i:integer;
+    d:boolean;
+begin
+  d:=false;
+  n:=Length(jseq);
+  for i:=0 to (n-1) do
+  begin
+    if jseq[i]=j then d:=true;
+  end;
+  Result:=d;
+end;
+
+
 procedure TForm1.UpdateJournal(j:integer);
 var n,i:integer;
     d:boolean;
 begin
-  n:=Length(jseq);
-  d:=false;
-  for i:=0 to n do
-  begin
-    if jseq[i]=j then d:=true;
-  end;
+
+  d:=CheckJournalUnlocked(j);
 
   if d=false then
   begin
     SetLength(jseq,n+1);
+    jseq[n]:=j;
+    //Showmessage('n='+inttostr(n)+'; j='+inttostr(j));
     ShowRequestForm(strarr[389],strarr[390],0,1,0,'');
   end;
-  jseq[n]:=j;
-
 
 end;
 
@@ -7286,6 +7333,28 @@ begin
   end;
 end;
 
+procedure TForm1.ChangeJPage(k:integer);
+begin
+  jspos:=jspos+k;
+  if (k<0) and (jspos<0) then
+  begin
+    jspos:=Length(jseq)-1;
+  end;
+  if (k>0) and (jspos>Length(jseq)-1) then
+  begin
+    jspos:=0;
+  end;
+  OpenJPos(jspos);
+end;
+
+procedure TForm1.OpenJPos(jpage:integer);
+var qjtext:string;
+begin
+  qjtext:=GetQJText(jseq[jpage]);
+  qjtext:=strarr[391]+' '+inttostr(jpage+1)+'/'+IntToStr(length(jseq))+#13#10+#13#10+qjtext;
+  ShowRequestForm(strarr[389],qjtext,1,44,0,'');
+end;
+
 
 procedure TForm1.ClickGButton(id:integer);
 var pni,ii,hes:integer;
@@ -7293,7 +7362,7 @@ var pni,ii,hes:integer;
 begin
 
   if (rqform=false) or (id=40) or (id=41) or (id=42) or (id=43) or (id=44)
-      or (id=45) or (id=48) or (id=49) then
+      or (id=45) or (id=48) or (id=49) or (id=55) or (id=56) or (id=57) or (id=58) then
 
   case id of
   0:begin
@@ -7483,29 +7552,38 @@ begin
 
       if rf_case=44 then
       begin
-        if jspos<=(length(jseq)-1) then
-        begin
-          qjtext:=GetQJText(jspos);
-          qjtext:=strarr[391]+' '+inttostr(jspos+1)+'/'+IntToStr(length(jseq))+#13#10+#13#10+qjtext;
-          ShowRequestForm(strarr[389],qjtext,1,44,0,'');
-        end;
-        jspos:=jspos+1;
+        OpenJPos(jspos);
       end;
 
       rqform:=false;
     end;
+  {journal}
   54:begin
        //open journal
        jspos:=0;
-       qjtext:=GetQJText(jspos);
-       qjtext:=strarr[391]+' '+inttostr(jspos+1)+'/'+IntToStr(length(jseq))+#13#10+#13#10+qjtext;
-
-       if jspos<=(length(jseq)-1) then
-       begin
-         ShowRequestForm(strarr[389],qjtext,1,44,0,'');
-       end;
-       jspos:=jspos+1;
+       OpenJPos(0);
      end;
+  55:begin
+       //next jrn page
+       ChangeJPage(1);
+       rqform:=false;
+     end;
+  56:begin
+       //prev jrn page
+       ChangeJPage(-1);
+       rqform:=false;
+     end;
+  57:begin
+       //next jrn page
+       ChangeJPage(10);
+       rqform:=false;
+     end;
+  58:begin
+       //prev jrn page
+       ChangeJPage(-10);
+       rqform:=false;
+     end;
+  {end journal}
   49:begin
        //rqform CANCEL
        rqform:=false;
@@ -8057,6 +8135,46 @@ begin
     w:=140;
     h:=35;
     caption:=strarr[1];
+    matoverride:='';
+    matname:='none';
+  end;
+
+  with gbtnv[55] do
+  begin
+    //Request form Next
+    w:=140;
+    h:=35;
+    caption:=strarr[392];
+    matoverride:='';
+    matname:='none';
+  end;
+
+  with gbtnv[56] do
+  begin
+    //Request form Back
+    w:=140;
+    h:=35;
+    caption:=strarr[393];
+    matoverride:='';
+    matname:='none';
+  end;
+
+  with gbtnv[57] do
+  begin
+    //Request form Next 10
+    w:=140;
+    h:=35;
+    caption:=strarr[392]+' 10';
+    matoverride:='';
+    matname:='none';
+  end;
+
+  with gbtnv[58] do
+  begin
+    //Request form Back 10
+    w:=140;
+    h:=35;
+    caption:=strarr[393]+' 10';
     matoverride:='';
     matname:='none';
   end;
@@ -11638,6 +11756,46 @@ begin
         visible:=true;
     end;
 
+    with gbtnv[55] do
+    begin
+      x:=round(reqform.Position.X+reqform.Width/2+w/2+5);
+      y:=round(reqform.Position.Y);
+      if rf_case=44 then
+        visible:=true
+      else
+        visible:=false;
+    end;
+
+    with gbtnv[56] do
+    begin
+      x:=round(reqform.Position.X-reqform.Width/2-w/2-5);
+      y:=round(reqform.Position.Y);
+      if rf_case=44 then
+        visible:=true
+      else
+        visible:=false;
+    end;
+
+    with gbtnv[57] do
+    begin
+      x:=round(reqform.Position.X+reqform.Width/2+w/2+5);
+      y:=round(reqform.Position.Y+h+5);
+      if rf_case=44 then
+        visible:=true
+      else
+        visible:=false;
+    end;
+
+    with gbtnv[58] do
+    begin
+      x:=round(reqform.Position.X-reqform.Width/2-w/2-5);
+      y:=round(reqform.Position.Y+h+5);
+      if rf_case=44 then
+        visible:=true
+      else
+        visible:=false;
+    end;
+
 
     //CHOICE MODE
     if rf_case=25 then
@@ -14341,12 +14499,12 @@ begin
   for i:=0 to mb do
   begin
 
-    if (i<>48) and (i<>49) and (i<>38) and (i<>39) and (i<>50) and
+    if (i<>48) and (i<>49) and (i<>55) and (i<>56) and (i<>57) and (i<>58) and (i<>38) and (i<>39) and (i<>50) and
        (i<>40) and (i<>41) and(i<>42) and(i<>43) and(i<>44) and(i<>45)then
       gbtn[i]:=TGLHUDSprite.CreateAsChild(dcuimiddle)
     else
     begin
-      if ((i>=40) and (i<=45)) or (i=48) or (i=49) then
+      if ((i>=40) and (i<=45)) or (i=48) or (i=49) or (i=55) or (i=56)or (i=57) or (i=58) then
         gbtn[i]:=TGLHUDSprite.CreateAsChild(dcrf);
       if (i=38) or (i=39) or (i=50) then
         gbtn[i]:=TGLHUDSprite.CreateAsChild(inventoryf1);
@@ -14354,12 +14512,12 @@ begin
 
     gbtn[i].Material.MaterialLibrary:=matlib;
 
-    if (i<>48) and (i<>49) and (i<>38) and (i<>39) and (i<>50)  and
+    if (i<>48) and (i<>49) and (i<>55) and (i<>56) and (i<>57) and (i<>58) and (i<>38) and (i<>39) and (i<>50)  and
        (i<>40) and (i<>41) and(i<>42) and(i<>43) and(i<>44) and(i<>45)then
       gbtnt[i]:=TGLHUDText.CreateAsChild(dcuifront)
     else
     begin
-      if ((i>=40) and (i<=45)) or(i=48) or (i=49) then
+      if ((i>=40) and (i<=45)) or(i=48) or (i=49) or (i=55) or (i=56) or (i=57) or (i=58) then
         gbtnt[i]:=TGLHUDText.CreateAsChild(dcrff);
       if (i=38) or (i=39) or (i=50) then
         gbtnt[i]:=TGLHUDText.CreateAsChild(inventoryf2);

@@ -72,9 +72,9 @@
         <DCC_DebugInformation>false</DCC_DebugInformation>
         <Icon_MainIcon>Everdark_Icon2.ico</Icon_MainIcon>
         <VerInfo_AutoIncVersion>true</VerInfo_AutoIncVersion>
-        <VerInfo_Keys>CompanyName=;FileDescription=Lo of the Dark executable;FileVersion=0.10.0.4000;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=Everdark.exe;ProductName=Lo of the Dark;ProductVersion=0.10;Comments=</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=;FileDescription=Lo of the Dark executable;FileVersion=0.10.0.4017;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=Everdark.exe;ProductName=Lo of the Dark;ProductVersion=0.10;Comments=</VerInfo_Keys>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
-        <VerInfo_Build>4000</VerInfo_Build>
+        <VerInfo_Build>4017</VerInfo_Build>
         <VerInfo_Locale>1033</VerInfo_Locale>
         <VerInfo_MinorVer>10</VerInfo_MinorVer>
         <VerInfo_MajorVer>0</VerInfo_MajorVer>
