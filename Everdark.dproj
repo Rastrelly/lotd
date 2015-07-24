@@ -68,17 +68,18 @@
         <DCC_RemoteDebug>true</DCC_RemoteDebug>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1_Win32)'!=''">
-        <DCC_DebugInfoInExe>false</DCC_DebugInfoInExe>
+        <DCC_DebugDCUs>false</DCC_DebugDCUs>
         <DCC_DebugInformation>false</DCC_DebugInformation>
+        <DCC_DebugInfoInExe>false</DCC_DebugInfoInExe>
+        <VerInfo_Release>2</VerInfo_Release>
         <Icon_MainIcon>Everdark_Icon2.ico</Icon_MainIcon>
         <VerInfo_AutoIncVersion>true</VerInfo_AutoIncVersion>
-        <VerInfo_Keys>CompanyName=;FileDescription=Lo of the Dark executable;FileVersion=0.10.0.4017;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=Everdark.exe;ProductName=Lo of the Dark;ProductVersion=0.10;Comments=</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=;FileDescription=Lo of the Dark executable;FileVersion=0.10.2.4112;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=Everdark.exe;ProductName=Lo of the Dark;ProductVersion=0.10;Comments=</VerInfo_Keys>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
-        <VerInfo_Build>4017</VerInfo_Build>
+        <VerInfo_Build>4112</VerInfo_Build>
         <VerInfo_Locale>1033</VerInfo_Locale>
         <VerInfo_MinorVer>10</VerInfo_MinorVer>
         <VerInfo_MajorVer>0</VerInfo_MajorVer>
-        <DCC_RemoteDebug>false</DCC_RemoteDebug>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <Manifest_File>None</Manifest_File>

@@ -16,6 +16,14 @@ uses
 
 type
 
+  globscript = record
+    text:string;
+    active:boolean;
+    refr:integer;
+    a,b:integer;
+    id:string;
+  end;
+
   gamebutton = record
     x,y,w,h:integer;
     state:integer; //0 - static, 1- mouse over, 2 - pressed
@@ -414,6 +422,14 @@ type
     dcmaingame: TGLDummyCube;
     monster_sign: TGLHUDSprite;
     //my procedures
+    procedure cleargslist;
+    procedure removeglobscript(name:string);
+    function preparescript(stxt:string):string;
+    function findgsid(name:string):integer;
+    procedure addglobscript(name:string);
+    procedure stopglobscript(name:string);
+    procedure runglobscript(name:string);
+    procedure processglobscripts;
     function CheckJournalUnlocked(j:integer):boolean;
     procedure ChangeJPage(k:integer);
     procedure OpenJPos(jpage:integer);
@@ -500,7 +516,7 @@ type
     procedure InventoryButtonClick(t:integer);
     procedure AddXP(reason,amount:integer; var cta:character);
     procedure readscript(st:string);
-    procedure dofunc(sfn:string);
+    procedure dofunc(sfn:string;cpn:integer);
     procedure PlayerTurn(sd:integer);
     procedure definebutsets;
     procedure ReadConfig;
@@ -610,6 +626,9 @@ var
   //CADENCER VARIABLE SET
 
   err:string='';
+
+  cdrstate:boolean=false;
+  wannaexit:boolean=false;
 
   bphase:integer=0; //battle phase controller var
   puc:boolean;
@@ -748,16 +767,15 @@ var
   dcrec:integer=0; //turns before disc card will be available
   dp:string;
 
-
   //cpu usage debug variables
-   block1:boolean=true;
-   block2:boolean=true;
-   block3:boolean=true;
-   block4:boolean=true;
-   block5:boolean=true;
-   block6:boolean=true;
-   block7:boolean=true;
-   block8:boolean=true;
+  block1:boolean=true;
+  block2:boolean=true;
+  block3:boolean=true;
+  block4:boolean=true;
+  block5:boolean=true;
+  block6:boolean=true;
+  block7:boolean=true;
+  block8:boolean=true;
 
   //end cpu usage debug vars
 
@@ -927,24 +945,27 @@ var
   strarr:array[0..10000]of string;
 
   //script variables
-  stext:string; //text of whole script
-  fname:string; //name of function
-  aname:string; //active group of symbols
-  sp:array[1..10]of string; //string params
-  ip:array[1..10]of integer;//integer params
-  cp:integer; //cursor position
+  stext:array [1..10000] of string; //text of whole script
+  fname:array [1..10000] of string; //name of function
+  aname:array [1..10000]of string; //active group of symbols
+  sp:array[1..10,1..10000]of string; //string params
+  ip:array[1..10,1..10000]of integer;//integer params
+  cp:array of integer; //cursor position
+
   rf_img_d:string; //image to demand from request form
 
   sw_,bw_,mg_,ar_,tsw,tbw,tmg,tar:integer;//battle output
   dmgo,healo,rmanao,effstro,cside:integer; //main effects external params
 
+  gs:array of globscript;
+
   //global variables
   vs:array[0..1000]of boolean;
   sv:array[0..1000]of string;
   iv:array[0..1000]of integer;
-  rvi:integer; //integer text
-  rvs:string;  //string text
-  ifworked:boolean; //true if IF was true
+  rvi:array[0..10000]of integer; //integer text
+  rvs:array [0..10000]of string;  //string text
+  ifworked:array[0..10000]of boolean; //true if IF was true
 
   recalc:boolean;
   dtout:real=1;
@@ -954,14 +975,138 @@ implementation
 
 {$R *.dfm}
 
+
 uses UEDmapedit,UEDcardedit, UEDSettings,UEDBattlelog, UEDSplash, UEDMap,
      UEDFullScreen2, UEDThread;
+
 
 
 {function checkmodeset(gm,im,ilm,cg,bm:boolean):boolean;
 begin
   if (gmmode=gm) and (invmode-im) and (itemlistmode=ilm) and (chargen)
 end;}
+
+procedure tform1.cleargslist;
+begin
+  SetLength(gs,0);
+  //gs[0].active:=false;
+end;
+
+
+function tform1.findgsid(name:string):integer;
+var ts:globscript;
+    i,n:integer;
+    done:boolean;
+begin
+  n:=Length(gs);
+  i:=0; done:=false;
+
+  if n>0 then
+  begin
+
+    repeat
+
+      if (gs[i].id=name) then
+      begin
+        done:=true;
+      end
+      else
+      begin
+        i:=i+1;
+      end;
+
+    until (i>=n-1) or (done=true);
+
+    if (i>=(n-1)) and (done=false) then i:=-1;
+
+  end;
+
+  if n=0 then i:=-1;
+
+  result:=i;
+
+end;
+
+procedure tform1.addglobscript(name:string);
+var ts:globscript;
+    stxt:string;
+begin
+  //adds a global script to a pool
+  Memo1.Lines.LoadFromFile(gameexe+'\scripts\'+name+'.txt');
+  stxt:=Memo1.Text;
+  ts.text:=preparescript(stxt);
+  ts.active:=true;
+  ts.a:=Length(gs);
+  ts.id:=name;
+  SetLength(gs,ts.a+1);
+  gs[ts.a]:=ts;
+end;
+
+
+procedure tform1.removeglobscript(name:string);
+var i:integer;
+    n,j:integer;
+begin
+  n:=findgsid(name);
+  if n<>-1 then
+  begin
+    j:=Length(gs);
+    if n<j-1 then
+    begin
+      for i:=n to j-1 do
+      begin
+        gs[i]:=gs[i+1];
+      end;
+    end;
+    SetLength(gs,j-1);
+  end;
+end;
+
+procedure tform1.stopglobscript(name:string);
+var k:integer;
+begin
+  k:=findgsid(name);
+  if k<>-1 then
+    gs[k].active:=false;
+end;
+
+procedure tform1.runglobscript(name:string);
+var k:integer;
+begin
+  k:=findgsid(name);
+  if k<>-1 then
+    gs[k].active:=true;
+end;
+
+procedure tform1.processglobscripts;
+var i,n:integer;
+begin
+
+  if wannaexit=false then
+  try
+
+    n:=Length(gs);
+
+    if n>0 then
+    begin
+
+      for i:=0 to (n-1) do
+      begin
+        with gs[i] do
+        begin
+          if active=true then
+          begin
+            readscript(text);
+          end;
+        end;
+      end;
+
+    end;
+
+  except end;
+
+end;
+
 
 function getbattlelistlength:integer;
 var i,r:integer;
@@ -1986,7 +2131,7 @@ end;        }
 
 
 //-----scripts------
-function preparescript(stxt:string):string;
+function tform1.preparescript(stxt:string):string;
 var temps:string;
     i:integer;
 begin
@@ -2000,7 +2145,7 @@ end;
 
 
 
-procedure processparam(ptxt:string;pno,pt:integer);
+procedure processparam(ptxt:string;pno,pt,cpn:integer);
 var fp:string;
     isvar,iskey:boolean;
     i:integer;
@@ -2027,10 +2172,10 @@ begin
 
   if isvar=true then
   begin
-    sp[pno]:=fp;
-    try ip[pno]:=strtoint(fp); except end;
-    rvs:='@';
-    rvi:=-1;
+    sp[pno,cpn]:=fp;
+    try ip[pno,cpn]:=strtoint(fp); except end;
+    rvs[cpn]:='@';
+    rvi[cpn]:=-1;
   end;
 
   if (iskey=true) and (isvar=false) then
@@ -2043,86 +2188,86 @@ begin
       //ShowMessage('aa');
       if usepitem=true then
       begin
-        rvi:=pitem;
-        //ShowMessage(inttostr(rvi));
-        if itms[rvi].overridename<>'' then
-          rvs:=itms[rvi].overridename
+        rvi[cpn]:=pitem;
+        //ShowMessage(inttostr(rvi[cpn]));
+        if itms[rvi[cpn]].overridename<>'' then
+          rvs[cpn]:=itms[rvi[cpn]].overridename
         else
-          rvs:=itms[rvi].name;
+          rvs[cpn]:=itms[rvi[cpn]].name;
       end
       else
       begin
-        rvi:=-1;
-        rvs:='^';
-        //ShowMessage(inttostr(rvi));
+        rvi[cpn]:=-1;
+        rvs[cpn]:='^';
+        //ShowMessage(inttostr(rvi[cpn]));
       end;
 
     end;
 
     if fp='sw' then
     begin
-      rvi:=sw_;
-      rvs:='^';
+      rvi[cpn]:=sw_;
+      rvs[cpn]:='^';
     end;
 
     if fp='bw' then
     begin
-      rvi:=bw_;
-      rvs:='^';
+      rvi[cpn]:=bw_;
+      rvs[cpn]:='^';
     end;
 
     if fp='mg' then
     begin
-      rvi:=mg_;
-      rvs:='^';
+      rvi[cpn]:=mg_;
+      rvs[cpn]:='^';
     end;
 
     if fp='ar' then
     begin
-      rvi:=ar_;
-      rvs:='^';
+      rvi[cpn]:=ar_;
+      rvs[cpn]:='^';
     end;
 
     if fp='tsw' then
     begin
-      rvi:=tsw;
-      rvs:='^';
+      rvi[cpn]:=tsw;
+      rvs[cpn]:='^';
     end;
 
     if fp='tbw' then
     begin
-      rvi:=tbw;
-      rvs:='^';
+      rvi[cpn]:=tbw;
+      rvs[cpn]:='^';
     end;
 
     if fp='tmg' then
     begin
-      rvi:=tmg;
-      rvs:='^';
+      rvi[cpn]:=tmg;
+      rvs[cpn]:='^';
     end;
 
     if fp='tar' then
     begin
-      rvi:=tar;
-      rvs:='^';
+      rvi[cpn]:=tar;
+      rvs[cpn]:='^';
     end;
 
     if fp='lookside' then
     begin
-      rvi:=lookside;
-      rvs:='^';
+      rvi[cpn]:=lookside;
+      rvs[cpn]:='^';
     end;
 
     if fp='pn' then
     begin
-      rvi:=0;
-      rvs:=player.name;
+      rvi[cpn]:=0;
+      rvs[cpn]:=player.name;
     end;
 
     if fp='choice' then
     begin
-      rvi:=bchoice;
-      rvs:='^';
+      rvi[cpn]:=bchoice;
+      rvs[cpn]:='^';
     end;
 
 
@@ -2130,23 +2275,42 @@ begin
 
   if (isvar=false) and (iskey=false) then
   begin
-    rvs:=fp;
-    try rvi:=strtoint(fp) except end;
+    rvs[cpn]:=fp;
+    try rvi[cpn]:=strtoint(fp) except end;
   end;
 end;
 
 
-function readnextword(st:string;cup:integer):string;
+function readnextword(st:string;cpn:integer):string;
 var i:integer;
     qw:string;
 begin
   qw:='';
 
   repeat
-    cp:=cp+1;
-    if ((st[cp]<>' ') and (st[cp]<>',') and (st[cp]<>';')) then
-      qw:=qw+st[cp];
-  until ((st[cp]=',') or (st[cp]=';'));
+    cp[cpn]:=cp[cpn]+1;
+    if ((st[cp[cpn]]<>' ') and (st[cp[cpn]]<>',') and (st[cp[cpn]]<>';')) then
+      qw:=qw+st[cp[cpn]];
+  until ((st[cp[cpn]]=',') or (st[cp[cpn]]=';'));
+
+  result:=qw;
+  //ShowMessage('ReadNextWord: "'+qw+'"');
+end;
+
+function checknextword(st:string;cpn:integer):string;
+var i:integer;
+    k:integer;
+    qw:string;
+begin
+  //same as readnextword, but does not move carriage
+  qw:='';
+  k:=cp[cpn];
+
+  repeat
+    k:=k+1;
+    if ((st[k]<>' ') and (st[k]<>',') and (st[k]<>';')) then
+      qw:=qw+st[k];
+  until ((st[k]=',') or (st[k]=';'));
 
   result:=qw;
   //ShowMessage('ReadNextWord: "'+qw+'"');
@@ -2168,284 +2332,378 @@ begin
 end;
 
 
-procedure tform1.dofunc(sfn:string);
+
+
+
+
+
+
+
+
+procedure tform1.dofunc(sfn:string;cpn:integer);
 var gf,lor:boolean;
     tw,r:string;
     lop:string;
     m1,m2:string;
     ii,j,lov1,lov2,av,tcpx,tcpy:integer;
     n1,n2,n3,n4,n5,n6,n7,n8,n9,n10:integer;
-    s1:string;
+    s1,s2,s3,s4,s5,s6:string;
     done:boolean;
+    cpr:integer;
 begin
   gf:=false;
-  fname:=aname;
+  fname[cpn]:=aname[cpn];
 
-  if fname='SetInt' then
+  if fname[cpn]='SetInt' then
   begin
   //form: setint &1 10;
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+      n1:=rvi[cpn];
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     iv[n1]:=n2;
 
-    //ShowMessage('iv['+inttostr(ip[1])+']='+inttostr(rvi));
+    //ShowMessage('iv['+inttostr(ip[1,cpn])+']='+inttostr(rvi[cpn]));
   end;
 
+  {  Memo1.Lines.LoadFromFile(gameexe+'\levels\'+mapid+'\sscript_'+inttostr(x)+'_'+inttostr(y)+'.txt');
+    stext:=Memo1.Text;
+    stext:=preparescript(stext);
+    readscript(stext);}
 
-
-  if fname='SetStr' then
+  if fname[cpn]='SetStr' then
   begin
   //form: setstr &1 text;
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    processparam(sp[2],2,0);
-    if ((rvs='@') and (rvi=-1)) then
-      sv[ip[1]]:=sv[ip[2]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    processparam(sp[2,cpn],2,0,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      sv[ip[1,cpn]]:=sv[ip[2,cpn]]
     else
-      sv[ip[1]]:=rvs;
+      sv[ip[1,cpn]]:=rvs[cpn];
   end;
 
 
-  if fname='Concat' then
+  if fname[cpn]='StartScript' then
   begin
   //form: setstr &1 text;
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      sv[ip[1]]:=sv[ip[2]]
+
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[2,cpn]]
     else
-      sv[ip[1]]:=rvs;
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      sv[ip[1]]:=sv[ip[2]]
+      n1:=rvi[cpn];
+
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,0,cpn);
+    s1:=rvs[cpn];
+
+    Memo1.Lines.LoadFromFile(gameexe+'\scripts\'+s1+'.txt');
+    if n1=0 then
+    begin
+      s2:=Memo1.Text;
+      s2:=preparescript(s2);
+      readscript(s2);
+    end
     else
-      sv[ip[1]]:=rvs;
+    begin
+      addglobscript(s1);
+    end;
+
+  end;
+
+  if fname[cpn]='StopScript' then
+  begin
+
+    gf:=true;
+
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],1,0,cpn);
+    s1:=rvs[cpn];
+
+    stopglobscript(s1);
+
+  end;
+
+  if fname[cpn]='RunScript' then
+  begin
+
+    gf:=true;
+
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],1,0,cpn);
+    s1:=rvs[cpn];
+
+    runglobscript(s1);
+
+  end;
+
+  if fname[cpn]='RemoveScript' then
+  begin
+
+    gf:=true;
+
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],1,0,cpn);
+    s1:=rvs[cpn];
+
+    removeglobscript(s1);
+
+  end;
+
+  if fname[cpn]='ClearGlobalScripts' then
+  begin
+
+    gf:=true;
+
+    cleargslist;
 
   end;
 
 
-  if fname='Random' then
+  if fname[cpn]='Concat' then
   begin
-  //form: setint &1 10;
+  //form: setstr &1 text;
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      iv[ip[1]]:=random(iv[ip[2]])
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      sv[ip[1,cpn]]:=sv[ip[2,cpn]]
     else
-      iv[ip[1]]:=random(rvi);
+      sv[ip[1,cpn]]:=rvs[cpn];
 
-    //ShowMessage('iv['+inttostr(ip[1])+']='+inttostr(rvi));
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      sv[ip[1,cpn]]:=sv[ip[2,cpn]]
+    else
+      sv[ip[1,cpn]]:=rvs[cpn];
+
   end;
 
-  if fname='GetItemCount' then
+
+  if fname[cpn]='Random' then
   begin
   //form: setint &1 10;
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      iv[ip[1,cpn]]:=random(iv[ip[2,cpn]])
     else
-      n1:=rvi;
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+      iv[ip[1,cpn]]:=random(rvi[cpn]);
+
+    //ShowMessage('iv['+inttostr(ip[1,cpn])+']='+inttostr(rvi[cpn]));
+  end;
+
+  if fname[cpn]='GetItemCount' then
+  begin
+  //form: setint &1 10;
+    gf:=true;
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n2:=rvi;
+      n1:=rvi[cpn];
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
+    else
+      n2:=rvi[cpn];
 
     iv[n1]:=itms[n2].count;
 
-    //ShowMessage('iv['+inttostr(ip[1])+']='+inttostr(rvi));
+    //ShowMessage('iv['+inttostr(ip[1,cpn])+']='+inttostr(rvi[cpn]));
   end;
 
 
-  if fname='GetFSpriteState' then
+  if fname[cpn]='GetFSpriteState' then
   begin
   //
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+      n1:=rvi[cpn];
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     if gfreesprite[n1].enabled=true then
       iv[n2]:=1
     else
       iv[n2]:=0;
 
-    //ShowMessage('iv['+inttostr(ip[1])+']='+inttostr(rvi));
+    //ShowMessage('iv['+inttostr(ip[1,cpn])+']='+inttostr(rvi[cpn]));
   end;
 
 
-    if fname='GetFMeshState' then
+    if fname[cpn]='GetFMeshState' then
   begin
   //
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+      n1:=rvi[cpn];
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     if gfreemesh[n1].enabled=true then
       iv[n2]:=1
     else
       iv[n2]:=0;
 
-    //ShowMessage('iv['+inttostr(ip[1])+']='+inttostr(rvi));
+    //ShowMessage('iv['+inttostr(ip[1,cpn])+']='+inttostr(rvi[cpn]));
   end;
 
 
-  if fname='GetEventState' then
+  if fname[cpn]='GetEventState' then
   begin
   //
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+      n1:=rvi[cpn];
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+      n2:=rvi[cpn];
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     if cells[n1,n2].trap=true then
       iv[n3]:=1
     else
       iv[n3]:=0;
 
-    //ShowMessage('iv['+inttostr(ip[1])+']='+inttostr(rvi));
+    //ShowMessage('iv['+inttostr(ip[1,cpn])+']='+inttostr(rvi[cpn]));
   end;
 
-  if fname='GetEventType' then
+  if fname[cpn]='GetEventType' then
   begin
   //
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+      n1:=rvi[cpn];
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+      n2:=rvi[cpn];
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     iv[n3]:=cells[n1,n2].traptype;
 
-    //ShowMessage('iv['+inttostr(ip[1])+']='+inttostr(rvi));
+    //ShowMessage('iv['+inttostr(ip[1,cpn])+']='+inttostr(rvi[cpn]));
   end;
 
-  if fname='DisableEvent' then
+  if fname[cpn]='DisableEvent' then
   begin
   //
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+      n1:=rvi[cpn];
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
 
     cells[n1,n2].trap:=false;
 
   end;
 
-  if fname='SetupEvent' then
+  if fname[cpn]='SetupEvent' then
   begin
   //
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    sp[3]:=readnextword(stext,cp);
-    sp[4]:=readnextword(stext,cp);
-    sp[5]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    sp[4,cpn]:=readnextword(stext[cpn],cpn);
+    sp[5,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+      n1:=rvi[cpn];
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+      n2:=rvi[cpn];
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
-    processparam(sp[4],4,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n4:=iv[ip[4]]
+      n3:=rvi[cpn];
+    processparam(sp[4,cpn],4,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n4:=iv[ip[4,cpn]]
     else
-      n4:=rvi;
-    processparam(sp[5],5,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n5:=iv[ip[5]]
+      n4:=rvi[cpn];
+    processparam(sp[5,cpn],5,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n5:=iv[ip[5,cpn]]
     else
-      n5:=rvi;
+      n5:=rvi[cpn];
 
     with cells[n1,n2] do
     begin
@@ -2456,44 +2714,44 @@ begin
     end;
 
 
-    //ShowMessage('iv['+inttostr(ip[1])+']='+inttostr(rvi));
+    //ShowMessage('iv['+inttostr(ip[1,cpn])+']='+inttostr(rvi[cpn]));
   end;
 
 
-  if (fname='If') then
+  if (fname[cpn]='If') then
   begin
     gf:=true;
-    ifworked:=false;
+    ifworked[cpn]:=false;
     //ShowMessage('Logical Operator');
 
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    sp[3]:=readnextword(stext,cp);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
 
     //logical value 1
-    processparam(sp[1],1,1);
-    //ShowMessage('rvs='+rvs+', rvi='+inttostr(rvi));
-    if ((rvs='@') and (rvi=-1)) then
-      lov1:=iv[ip[1]]
+    processparam(sp[1,cpn],1,1,cpn);
+    //ShowMessage('rvs[cpn]='+rvs[cpn]+', rvi[cpn]='+inttostr(rvi[cpn]));
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      lov1:=iv[ip[1,cpn]]
     else
-      lov1:=rvi;
+      lov1:=rvi[cpn];
 
-    //ShowMessage('lov1='+inttostr(lov1)+'; ip1='+inttostr(ip[1])+';  rvi='+inttostr(rvi));
+    //ShowMessage('lov1='+inttostr(lov1)+'; ip1='+inttostr(ip[1,cpn])+';  rvi[cpn]='+inttostr(rvi[cpn]));
 
     //logical operator
-    processparam(sp[2],2,0);
-    lop:=rvs;
+    processparam(sp[2,cpn],2,0,cpn);
+    lop:=rvs[cpn];
     //ShowMessage('lop='+lop);
 
     //logical value 2
-    processparam(sp[3],3,1);
-    //ShowMessage('rvs='+rvs+', rvi='+inttostr(rvi));
-    if ((rvs='@') and (rvi=-1)) then
-      lov2:=iv[ip[3]]
+    processparam(sp[3,cpn],3,1,cpn);
+    //ShowMessage('rvs[cpn]='+rvs[cpn]+', rvi[cpn]='+inttostr(rvi[cpn]));
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      lov2:=iv[ip[3,cpn]]
     else
-      lov2:=rvi;
+      lov2:=rvi[cpn];
 
-    //ShowMessage('lov2='+inttostr(lov2)+'; ip3='+inttostr(ip[3])+';  rvi='+inttostr(rvi));
+    //ShowMessage('lov2='+inttostr(lov2)+'; ip3='+inttostr(ip[3,cpn])+';  rvi[cpn]='+inttostr(rvi[cpn]));
 
     //checking if logical statement is true or false
     if lop='<' then begin
@@ -2518,59 +2776,59 @@ begin
     if lor=false then
     begin
       repeat
-        tw:=readnextword(stext,cp);
+        tw:=readnextword(stext[cpn],cpn);
       until (tw='EndIf') or (tw='Else');
     end;
 
-    if lor=true then ifworked:=true;
+    if lor=true then ifworked[cpn]:=true;
 
     //ShowMessage(inttostr(lov1)+lop+inttostr(lov2)+' outcomes in '+booltostr(lor));
 
   end;
 
 
-  if (fname='Else') and (ifworked=true) then
+  if (fname[cpn]='Else') and (ifworked[cpn]=true) then
   begin
     gf:=true;
-    ifworked:=false;
+    ifworked[cpn]:=false;
     repeat
-      tw:=readnextword(stext,cp);
+      tw:=readnextword(stext[cpn],cpn);
     until (tw='EndIf') or (tw='Else');
   end;
 
 
 
-  if fname='Math' then
+  if fname[cpn]='Math' then
   begin
     gf:=true;
 
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
-    sp[3]:=readnextword(stext,cp);
-    sp[4]:=readnextword(stext,cp);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    sp[4,cpn]:=readnextword(stext[cpn],cpn);
 
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      av:=iv[ip[1]]
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      av:=iv[ip[1,cpn]]
     else
-      av:=rvi;
+      av:=rvi[cpn];
 
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      lov1:=iv[ip[2]]
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      lov1:=iv[ip[2,cpn]]
     else
-      lov1:=rvi;
+      lov1:=rvi[cpn];
 
     //logical operator
-    processparam(sp[3],3,0);
-    lop:=rvs;
+    processparam(sp[3,cpn],3,0,cpn);
+    lop:=rvs[cpn];
 
     //logical value 2
-    processparam(sp[4],4,1);
-    if ((rvs='@') and (rvi=-1)) then
-      lov2:=iv[ip[4]]
+    processparam(sp[4,cpn],4,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      lov2:=iv[ip[4,cpn]]
     else
-      lov2:=rvi;
+      lov2:=rvi[cpn];
 
     if lop='+' then
     begin
@@ -2596,29 +2854,29 @@ begin
 
   end;
 
-  if fname='PlaySound' then
+  if fname[cpn]='PlaySound' then
   begin
 
     gf:=true;
 
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,0);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,0,cpn);
 
-    DoSound(sp[1]);
+    DoSound(sp[1,cpn]);
 
   end;
 
-  if fname='ShowMsg' then
+  if fname[cpn]='ShowMsg' then
   begin
     gf:=true;
 
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,0);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,0,cpn);
 
-    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1]+'_h.txt');
+    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1,cpn]+'_h.txt');
     m1:=Memo1.Text;
 
-    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1]+'.txt');
+    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1,cpn]+'.txt');
     m2:=Memo1.Text;
 
     ShowRequestForm(m1,m2,0,1,0,'');
@@ -2626,148 +2884,122 @@ begin
   end;
 
 
-  if fname='ShowImg' then
+  if fname[cpn]='ShowImg' then
   begin
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,0);
-    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1]+'_h.txt');
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,0,cpn);
+    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1,cpn]+'_h.txt');
     m1:=Memo1.Text;
-    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1]+'.txt');
+    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1,cpn]+'.txt');
     m2:=Memo1.Text;
 
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,0);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,0,cpn);
 
-    ShowRequestForm(m1,m2,0,11,0,sp[2]);
+    ShowRequestForm(m1,m2,0,11,0,sp[2,cpn]);
   end;
 
-  if fname='ShowScroll' then
+  if fname[cpn]='ShowScroll' then
   begin
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,0);
-    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1]+'_h.txt');
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,0,cpn);
+    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1,cpn]+'_h.txt');
     m1:=Memo1.Text;
-    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1]+'.txt');
+    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1,cpn]+'.txt');
     m2:=Memo1.Text;
     ShowRequestForm(m1,m2,0,10,0,'');
   end;
 
   //read/set params
 
-  if fname='ReadPlayerParam' then
+  if fname[cpn]='ReadPlayerParam' then
   begin
     gf:=true;
 
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      av:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    //showmessage('sp1='+sp[1,cpn]);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      av:=iv[ip[1,cpn]]
     else
-      av:=rvi;
+      av:=rvi[cpn];
 
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[2,cpn]]
+    else
+      n1:=rvi[cpn];
 
     if (av=1) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.strength
-      else
-        iv[rvi]:=player.strength;
+      iv[n1]:=player.strength
     end;
     if (av=2) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.intelligence
-      else
-        iv[rvi]:=player.intelligence;
+      iv[n1]:=player.intelligence
     end;
     if (av=3) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.endurance
-      else
-        iv[rvi]:=player.endurance;
+      iv[n1]:=player.endurance
     end;
     if (av=4) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.speed
-      else
-        iv[rvi]:=player.speed;
+      iv[n1]:=player.speed
     end;
     if (av=5) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.sword
-      else
-        iv[rvi]:=player.sword;
+      iv[n1]:=player.sword
     end;
     if (av=6) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.bow
-      else
-        iv[rvi]:=player.bow;
+      iv[n1]:=player.bow
     end;
     if (av=7) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.magic
-      else
-        iv[rvi]:=player.magic;
+      iv[n1]:=player.magic
     end;
     if (av=8) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.armor
-      else
-        iv[rvi]:=player.armor;
+      iv[n1]:=player.armor
     end;
     if (av=9) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.hpmax
-      else
-        iv[rvi]:=player.hpmax;
+      iv[n1]:=player.hpmax
     end;
     if (av=10) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.manamax
-      else
-        iv[rvi]:=player.manamax;
+      iv[n1]:=player.manamax
     end;
     if (av=11) then
     begin
-      if ((rvs='@') and (rvi=-1)) then
-        iv[ip[2]]:=player.lvl
-      else
-        iv[rvi]:=player.lvl;
+      iv[n1]:=player.lvl
     end;
+
+    //ShowMessage('av='+inttostr(av)+'; iv[n1]='+inttostr(iv[n1]));
 
   end;
 
 
 
-  if fname='SetupCell' then
+  if fname[cpn]='SetupCell' then
   begin
     gf:=true;
 
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      tcpx:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      tcpx:=iv[ip[1,cpn]]
     else
-      tcpx:=rvi;
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      tcpy:=iv[ip[2]]
+      tcpx:=rvi[cpn];
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      tcpy:=iv[ip[2,cpn]]
     else
-      tcpy:=rvi;
+      tcpy:=rvi[cpn];
 
     //ShowMessage('SetupCell ('+inttostr(tcpx)+','+inttostr(tcpy)+')');
 
@@ -2775,52 +3007,52 @@ begin
     begin
       //wall
       j:=3;
-      sp[j]:=readnextword(stext,cp);
-      processparam(sp[j],j,1);
-      if ((rvs='@') and (rvi=-1)) then
-        av:=iv[ip[j]]
+      sp[j,cpn]:=readnextword(stext[cpn],cpn);
+      processparam(sp[j,cpn],j,1,cpn);
+      if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+        av:=iv[ip[j,cpn]]
       else
-        av:=rvi;
+        av:=rvi[cpn];
       if av=0 then wall:=false else wall:=true;
 
       //passable
       j:=4;
-      sp[j]:=readnextword(stext,cp);
-      processparam(sp[j],j,1);
-      if ((rvs='@') and (rvi=-1)) then
-        av:=iv[ip[j]]
+      sp[j,cpn]:=readnextword(stext[cpn],cpn);
+      processparam(sp[j,cpn],j,1,cpn);
+      if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+        av:=iv[ip[j,cpn]]
       else
-        av:=rvi;
+        av:=rvi[cpn];
       if av=0 then passable:=false else passable:=true;
 
       //floor
       j:=5;
-      sp[j]:=readnextword(stext,cp);
-      processparam(sp[j],j,1);
-      if ((rvs='@') and (rvi=-1)) then
-        av:=iv[ip[j]]
+      sp[j,cpn]:=readnextword(stext[cpn],cpn);
+      processparam(sp[j,cpn],j,1,cpn);
+      if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+        av:=iv[ip[j,cpn]]
       else
-        av:=rvi;
+        av:=rvi[cpn];
       if av=0 then floor:=false else floor:=true;
 
       //ceiling
       j:=6;
-      sp[j]:=readnextword(stext,cp);
-      processparam(sp[j],j,1);
-      if ((rvs='@') and (rvi=-1)) then
-        av:=iv[ip[j]]
+      sp[j,cpn]:=readnextword(stext[cpn],cpn);
+      processparam(sp[j,cpn],j,1,cpn);
+      if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+        av:=iv[ip[j,cpn]]
       else
-        av:=rvi;
+        av:=rvi[cpn];
       if av=0 then ceil:=false else ceil:=true;
 
       //door or chest
       j:=7;
-      sp[j]:=readnextword(stext,cp);
-      processparam(sp[j],j,1);
-      if ((rvs='@') and (rvi=-1)) then
-        av:=iv[ip[j]]
+      sp[j,cpn]:=readnextword(stext[cpn],cpn);
+      processparam(sp[j,cpn],j,1,cpn);
+      if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+        av:=iv[ip[j,cpn]]
       else
-        av:=rvi;
+        av:=rvi[cpn];
       if av=0 then
       begin
         door:=False;
@@ -2839,31 +3071,31 @@ begin
 
       //power
       j:=8;
-      sp[j]:=readnextword(stext,cp);
-      processparam(sp[j],j,1);
-      if ((rvs='@') and (rvi=-1)) then
-        av:=iv[ip[j]]
+      sp[j,cpn]:=readnextword(stext[cpn],cpn);
+      processparam(sp[j,cpn],j,1,cpn);
+      if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+        av:=iv[ip[j,cpn]]
       else
-        av:=rvi;
+        av:=rvi[cpn];
       power:=av;
 
       //cell sprite
       j:=9;
-      sp[j]:=readnextword(stext,cp);
-      processparam(sp[j],j,0);
-      if ((rvs='@') and (rvi=-1)) then
-        spritename:=sv[ip[j]]
+      sp[j,cpn]:=readnextword(stext[cpn],cpn);
+      processparam(sp[j,cpn],j,0,cpn);
+      if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+        spritename:=sv[ip[j,cpn]]
       else
-        spritename:=rvs;
+        spritename:=rvs[cpn];
 
       //cell id
       j:=10;
-      sp[j]:=readnextword(stext,cp);
-      processparam(sp[j],j,1);
-      if ((rvs='@') and (rvi=-1)) then
-        av:=iv[ip[j]]
+      sp[j,cpn]:=readnextword(stext[cpn],cpn);
+      processparam(sp[j,cpn],j,1,cpn);
+      if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+        av:=iv[ip[j,cpn]]
       else
-        av:=rvi;
+        av:=rvi[cpn];
       textid:=av;
 
     end;
@@ -2875,84 +3107,84 @@ begin
 
 
 
-  if fname='Teleport' then
+  if fname[cpn]='Teleport' then
   begin
 
     gf:=true;
 
     //player X
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      plx:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      plx:=iv[ip[1,cpn]]
     else
-      plx:=rvi;
+      plx:=rvi[cpn];
 
     //player Y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      ply:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      ply:=iv[ip[2,cpn]]
     else
-      ply:=rvi;
+      ply:=rvi[cpn];
 
     //player lookside
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      lookside:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      lookside:=iv[ip[3,cpn]]
     else
-      lookside:=rvi;
+      lookside:=rvi[cpn];
 
     port:=true;
 
   end;
 
-  if fname='JumpTo' then
+  if fname[cpn]='JumpTo' then
   begin
 
     gf:=true;
 
     //player X
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      plx:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      plx:=iv[ip[1,cpn]]
     else
-      plx:=rvi;
+      plx:=rvi[cpn];
 
     //player Y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      ply:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      ply:=iv[ip[2,cpn]]
     else
-      ply:=rvi;
+      ply:=rvi[cpn];
 
     //player lookside
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      lookside:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      lookside:=iv[ip[3,cpn]]
     else
-      lookside:=rvi;
+      lookside:=rvi[cpn];
 
     port:=false;
 
   end;
 
-  if fname='ToggleLight' then
+  if fname[cpn]='ToggleLight' then
   begin
 
     gf:=true;
 
     //light id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     with visls[n1] do
     begin
@@ -2963,90 +3195,90 @@ begin
   end;
 
 
-  if fname='FMeshBehaviour' then
+  if fname[cpn]='FMeshBehaviour' then
   begin
 
     gf:=true;
 
     //fmesh id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //bhv
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     //loop (0/1)
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     //spd x 1000
-    sp[4]:=readnextword(stext,cp);
-    processparam(sp[4],4,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n4:=iv[ip[4]]
+    sp[4,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[4,cpn],4,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n4:=iv[ip[4,cpn]]
     else
-      n4:=rvi;
+      n4:=rvi[cpn];
 
     //x1
-    sp[5]:=readnextword(stext,cp);
-    processparam(sp[5],5,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n5:=iv[ip[5]]
+    sp[5,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[5,cpn],5,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n5:=iv[ip[5,cpn]]
     else
-      n5:=rvi;
+      n5:=rvi[cpn];
 
     //x2
-    sp[6]:=readnextword(stext,cp);
-    processparam(sp[6],6,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n6:=iv[ip[6]]
+    sp[6,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[6,cpn],6,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n6:=iv[ip[6,cpn]]
     else
-      n6:=rvi;
+      n6:=rvi[cpn];
 
     //y1
-    sp[7]:=readnextword(stext,cp);
-    processparam(sp[7],7,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n7:=iv[ip[7]]
+    sp[7,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[7,cpn],7,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n7:=iv[ip[7,cpn]]
     else
-      n7:=rvi;
+      n7:=rvi[cpn];
 
     //y2
-    sp[8]:=readnextword(stext,cp);
-    processparam(sp[8],8,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n8:=iv[ip[8]]
+    sp[8,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[8,cpn],8,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n8:=iv[ip[8,cpn]]
     else
-      n8:=rvi;
+      n8:=rvi[cpn];
 
     //z1
-    sp[9]:=readnextword(stext,cp);
-    processparam(sp[9],9,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n9:=iv[ip[9]]
+    sp[9,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[9,cpn],9,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n9:=iv[ip[9,cpn]]
     else
-      n9:=rvi;
+      n9:=rvi[cpn];
 
     //z2
-    sp[10]:=readnextword(stext,cp);
-    processparam(sp[10],10,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n10:=iv[ip[10]]
+    sp[10,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[10,cpn],10,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n10:=iv[ip[10,cpn]]
     else
-      n10:=rvi;
+      n10:=rvi[cpn];
 
     with gfreemesh[n1] do
     begin
@@ -3065,26 +3297,26 @@ begin
   end;
 
 
-  if fname='ChangeFSprite' then
+  if fname[cpn]='ChangeFSprite' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //player Y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,0);
-    if ((rvs='@') and (rvi=-1)) then
-      s1:=sv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,0,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      s1:=sv[ip[2,cpn]]
     else
-      s1:=rvs;
+      s1:=rvs[cpn];
 
     gfreesprite[n1].name:=s1;
 
@@ -3092,18 +3324,18 @@ begin
   end;
 
 
-  if fname='GetPlayerInAC' then
+  if fname[cpn]='GetPlayerInAC' then
   begin
 
     gf:=true;
 
     //var
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     if (plx=actcx) and (ply=actcy) then
       iv[n1]:=1
@@ -3111,34 +3343,34 @@ begin
 
   end;
 
-  if fname='GetPlayerInCoords' then
+  if fname[cpn]='GetPlayerInCoords' then
   begin
 
     gf:=true;
 
     //var
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //x
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     //y
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     if (plx=n2) and (ply=n3) then
       iv[n1]:=1
@@ -3147,61 +3379,61 @@ begin
   end;
 
 
-  if fname='AddAttrPoints' then
+  if fname[cpn]='AddAttrPoints' then
   begin
 
     gf:=true;
 
     //var
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     AddAttrPoints(n1,false);
 
   end;
 
 
-  if fname='AddPerkPoints' then
+  if fname[cpn]='AddPerkPoints' then
   begin
 
     gf:=true;
 
     //var
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     AddPerkPoints(n1);
 
   end;
 
 
-  if fname='SetActiveItem' then
+  if fname[cpn]='SetActiveItem' then
   begin
 
     gf:=true;
 
     //0 - sw, 1 - bw, 2 - arm
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     case n1 of
     0:begin
@@ -3221,26 +3453,26 @@ begin
   end;
 
 
-  if fname='ChangeFMesh' then
+  if fname[cpn]='ChangeFMesh' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //player Y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,0);
-    if ((rvs='@') and (rvi=-1)) then
-      s1:=sv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,0,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      s1:=sv[ip[2,cpn]]
     else
-      s1:=rvs;
+      s1:=rvs[cpn];
 
     gfreemesh[n1].name:=s1;
 
@@ -3248,69 +3480,69 @@ begin
   end;
 
 
-  if fname='ChangeFMeshTrScript' then
+  if fname[cpn]='ChangeFMeshTrScript' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //script name
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,0);
-    if ((rvs='@') and (rvi=-1)) then
-      s1:=sv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,0,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      s1:=sv[ip[2,cpn]]
     else
-      s1:=rvs;
+      s1:=rvs[cpn];
 
     gfreemesh[n1].trscript:=s1;
 
     ModFreeMesh(n1);
   end;
 
-  if fname='UpdateJournal' then
+  if fname[cpn]='UpdateJournal' then
   begin
 
     gf:=true;
 
     //journal id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     UpdateJournal(n1);
 
   end;
 
-  if fname='CheckJournalUnlocked' then
+  if fname[cpn]='CheckJournalUnlocked' then
   begin
 
     gf:=true;
 
     //journal id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //varno
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
 
     if CheckJournalUnlocked(n1)=true then
@@ -3325,34 +3557,34 @@ begin
   end;
 
 
-  if fname='CompareFSprite' then
+  if fname[cpn]='CompareFSprite' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //player Y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,0);
-    if ((rvs='@') and (rvi=-1)) then
-      s1:=sv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,0,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      s1:=sv[ip[2,cpn]]
     else
-      s1:=rvs;
+      s1:=rvs[cpn];
 
     //var no
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[3,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     if gfreesprite[n1].name=s1 then
     begin
@@ -3367,34 +3599,34 @@ begin
 
 
 
-  if fname='CompareFMesh' then
+  if fname[cpn]='CompareFMesh' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //player Y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,0);
-    if ((rvs='@') and (rvi=-1)) then
-      s1:=sv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,0,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      s1:=sv[ip[2,cpn]]
     else
-      s1:=rvs;
+      s1:=rvs[cpn];
 
     //var no
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[3,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     if gfreemesh[n1].name=s1 then
     begin
@@ -3408,34 +3640,34 @@ begin
   end;
 
 
-  if fname='GetFMeshCoord' then
+  if fname[cpn]='GetFMeshCoord' then
   begin
 
     gf:=true;
 
     //mesh id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //axis
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,0);
-    if ((rvs='@') and (rvi=-1)) then
-      s1:=sv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,0,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      s1:=sv[ip[2,cpn]]
     else
-      s1:=rvs;
+      s1:=rvs[cpn];
 
     //var no
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[3,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     with gfreemesh[n1] do
     begin
@@ -3447,35 +3679,35 @@ begin
   end;
 
 
-  if fname='GetPLZ' then
+  if fname[cpn]='GetPLZ' then
   begin
 
     gf:=true;
 
     //cell x
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //cell y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
 
     //var no
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     with cells[n1,n2] do
     begin
@@ -3485,35 +3717,35 @@ begin
   end;
 
 
-  if fname='SetPLZ' then
+  if fname[cpn]='SetPLZ' then
   begin
 
     gf:=true;
 
     //cell x
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //cell y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
 
     //plz
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     with cells[n1,n2] do
     begin
@@ -3523,61 +3755,61 @@ begin
   end;
 
 
-  if fname='AddToBattleList' then
+  if fname[cpn]='AddToBattleList' then
   begin
 
     gf:=true;
 
     //monster no
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     AddToBL(n1);
 
   end;
 
 
-  if fname='SetFSpritePos' then
+  if fname[cpn]='SetFSpritePos' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //x
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
 
     //y
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     //z
-    sp[4]:=readnextword(stext,cp);
-    processparam(sp[4],4,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n4:=iv[ip[4]]
+    sp[4,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[4,cpn],4,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n4:=iv[ip[4,cpn]]
     else
-      n4:=rvi;
+      n4:=rvi[cpn];
 
     with gfreesprite[n1] do
     begin
@@ -3591,43 +3823,43 @@ begin
 
 
 
-  if fname='SetFMeshPos' then
+  if fname[cpn]='SetFMeshPos' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //x
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
 
     //y
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     //z
-    sp[4]:=readnextword(stext,cp);
-    processparam(sp[4],4,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n4:=iv[ip[4]]
+    sp[4,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[4,cpn],4,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n4:=iv[ip[4,cpn]]
     else
-      n4:=rvi;
+      n4:=rvi[cpn];
 
     with gfreemesh[n1] do
     begin
@@ -3639,43 +3871,43 @@ begin
     ModFreeMesh(n1);
   end;
 
-  if fname='SetFMeshAng' then
+  if fname[cpn]='SetFMeshAng' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //x
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
 
     //y
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     //z
-    sp[4]:=readnextword(stext,cp);
-    processparam(sp[4],4,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n4:=iv[ip[4]]
+    sp[4,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[4,cpn],4,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n4:=iv[ip[4,cpn]]
     else
-      n4:=rvi;
+      n4:=rvi[cpn];
 
     with gfreemesh[n1] do
     begin
@@ -3688,26 +3920,26 @@ begin
   end;
 
 
-  if fname='SetFSpriteState' then
+  if fname[cpn]='SetFSpriteState' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //sprite state
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     if n2=0 then
       gfreesprite[n1].enabled:=false
@@ -3718,26 +3950,26 @@ begin
   end;
 
 
-  if fname='SetFMeshState' then
+  if fname[cpn]='SetFMeshState' then
   begin
 
     gf:=true;
 
     //sprite id
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //sprite state
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     if n2=0 then
       gfreemesh[n1].enabled:=false
@@ -3749,24 +3981,24 @@ begin
 
 
 
-  if fname='AddItem' then
+  if fname[cpn]='AddItem' then
   begin
   //form: AddItem 1 10;
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
 
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     if n1=-1 then n1:=RandomLoot;
 
@@ -3775,7 +4007,7 @@ begin
   end;
 
 
-  if fname='RemoveThisWall' then
+  if fname[cpn]='RemoveThisWall' then
   begin
     gf:=true;
     cells[actcx,actcy].wall:=false;
@@ -3783,23 +4015,23 @@ begin
     BuildCell(actcx,actcy);
   end;
 
-  if fname='RemoveWall' then
+  if fname[cpn]='RemoveWall' then
   begin
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
 
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     cells[n1,n2].wall:=false;
     cells[n1,n2].passable:=true;
@@ -3807,21 +4039,21 @@ begin
   end;
 
 
-  if fname='RemoveThisSprite' then
+  if fname[cpn]='RemoveThisSprite' then
   begin
     gf:=true;
     cells[actcx,actcy].spritename:='0';
     BuildCell(actcx,actcy);
   end;
 
-  if fname='MakeThisPassable' then
+  if fname[cpn]='MakeThisPassable' then
   begin
     gf:=true;
     cells[actcx,actcy].passable:=true;
     BuildCell(actcx,actcy);
   end;
 
-  if fname='MakeThisUnpassable' then
+  if fname[cpn]='MakeThisUnpassable' then
   begin
     gf:=true;
     cells[actcx,actcy].passable:=false;
@@ -3829,18 +4061,18 @@ begin
   end;
 
 
-  if fname='SetCellSprite' then
+  if fname[cpn]='SetCellSprite' then
   begin
 
     gf:=true;
 
     //sprite name
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,0);
-    if ((rvs='@') and (rvi=-1)) then
-      cells[actcx,actcy].spritename:=sv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,0,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      cells[actcx,actcy].spritename:=sv[ip[1,cpn]]
     else
-      cells[actcx,actcy].spritename:=rvs;
+      cells[actcx,actcy].spritename:=rvs[cpn];
 
     //ShowMessage(cells[actcx,actcy].spritename);
 
@@ -3849,30 +4081,30 @@ begin
   end;
 
 
-  if fname='NoSearch' then
+  if fname[cpn]='NoSearch' then
   begin
     gf:=true;
     nosearch:=true;
   end;
 
-  if fname='SwapCard' then
+  if fname[cpn]='SwapCard' then
   begin
   //form: AddItem 3,5;
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    sp[2]:=readnextword(stext,cp);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
 
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     if cside=0 then
       player.hand[n1]:=n2;
@@ -3881,17 +4113,17 @@ begin
 
   end;
 
-  if fname='UnlockCard' then
+  if fname[cpn]='UnlockCard' then
   begin
   //form: AddItem 3,5;
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
 
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     AddNewCard(true,n1,true,true,false,player);
     //ShowRequestForm(strarr[25],strarr[33],0,5,0,'');
@@ -3900,14 +4132,14 @@ begin
     //hand[n1]:=n2;
   end;
 
-  if fname='KeepTurn' then
+  if fname[cpn]='KeepTurn' then
   begin
     gf:=true;
     keepturn:=true;
     //ShowMessage('Keep turn');
   end;
 
-  if fname='CleanChoice' then
+  if fname[cpn]='CleanChoice' then
   begin
     gf:=true;
     for ii:=0 to 5 do
@@ -3920,27 +4152,27 @@ begin
     //ShowMessage('Keep turn');
   end;
 
-  if fname='Choice' then
+  if fname[cpn]='Choice' then
   begin
   //form: Choice 3,text;
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
 
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
-    sp[2]:=readnextword(stext,cp);
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
 
-    processparam(sp[2],2,0);
-    if ((rvs='@') and (rvi=-1)) then
-      s1:=sv[ip[2]]
+    processparam(sp[2,cpn],2,0,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      s1:=sv[ip[2,cpn]]
     else
-      s1:=rvs;
+      s1:=rvs[cpn];
 
-    //ShowMessage('Choice. Input: "'+sp[1]+'"; "'+sp[2]+'". Output: "'+inttostr(n1)+'"; "'+s1+'".');
+    //ShowMessage('Choice. Input: "'+sp[1,cpn]+'"; "'+sp[2,cpn]+'". Output: "'+inttostr(n1)+'"; "'+s1+'".');
 
     Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\'+s1+'.txt');
 
@@ -3952,19 +4184,19 @@ begin
 
   end;
 
-  if fname='ImageCh' then
+  if fname[cpn]='ImageCh' then
   begin
   //form: ChoiceImage text;
     gf:=true;
 
-    sp[1]:=readnextword(stext,cp);
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
 
-    processparam(sp[1],1,0);
+    processparam(sp[1,cpn],1,0,cpn);
 
-    if ((rvs='@') and (rvi=-1)) then
-      s1:=sv[ip[1]]
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      s1:=sv[ip[1,cpn]]
     else
-      s1:=rvs;
+      s1:=rvs[cpn];
 
     //ShowMessage(s1);
 
@@ -3973,20 +4205,20 @@ begin
 
   end;
 
-  if fname='ShowChoice' then
+  if fname[cpn]='ShowChoice' then
   begin
 
     gf:=true;
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,0);
-    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1]+'_h.txt');
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,0,cpn);
+    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1,cpn]+'_h.txt');
     m1:=Memo1.Text;
-    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1]+'.txt');
+    Memo1.Lines.LoadFromFile(gameexe+'\text\'+lang+'\txt_'+sp[1,cpn]+'.txt');
     m2:=Memo1.Text;
 
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,0);
-    afterch:=sp[2];
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,0,cpn);
+    afterch:=sp[2,cpn];
 
     for ii:=0 to 5 do
     begin
@@ -4008,18 +4240,18 @@ begin
   end;
 
 
-  if fname='UnlockPerk' then
+  if fname[cpn]='UnlockPerk' then
   begin
 
     gf:=true;
 
     //perk no
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     player.perks[n1]:=true;
 
@@ -4029,83 +4261,83 @@ begin
 
 
 
-  if fname='PerkUnlocked' then
+  if fname[cpn]='PerkUnlocked' then
   begin
 
     gf:=true;
 
     //perk no
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     if player.perks[n1]=true then n2:=1 else n2:=0;
 
     //where to write
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      iv[iv[ip[2]]]:=n2
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      iv[iv[ip[2,cpn]]]:=n2
     else
-      iv[rvi]:=n2;
+      iv[rvi[cpn]]:=n2;
 
   end;
 
-  if fname='ChangeLighting' then
+  if fname[cpn]='ChangeLighting' then
   begin
 
     gf:=true;
 
     //ca
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //la
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     //qa
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     //r
-    sp[4]:=readnextword(stext,cp);
-    processparam(sp[4],4,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n4:=iv[ip[4]]
+    sp[4,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[4,cpn],4,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n4:=iv[ip[4,cpn]]
     else
-      n4:=rvi;
+      n4:=rvi[cpn];
 
     //g
-    sp[5]:=readnextword(stext,cp);
-    processparam(sp[5],5,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n5:=iv[ip[5]]
+    sp[5,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[5,cpn],5,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n5:=iv[ip[5,cpn]]
     else
-      n5:=rvi;
+      n5:=rvi[cpn];
 
     //b
-    sp[6]:=readnextword(stext,cp);
-    processparam(sp[6],6,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n6:=iv[ip[6]]
+    sp[6,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[6,cpn],6,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n6:=iv[ip[6,cpn]]
     else
-      n6:=rvi;
+      n6:=rvi[cpn];
 
     with playerlight do
     begin
@@ -4120,7 +4352,7 @@ begin
   end;
 
 
-  if fname='ResetLighting' then
+  if fname[cpn]='ResetLighting' then
   begin
     Form1.playerlight.ConstAttenuation:=0.5;
     Form1.playerlight.LinearAttenuation:=0.01;
@@ -4131,7 +4363,7 @@ begin
     gf:=true;
   end;
 
-  if fname='KillPlayer' then
+  if fname[cpn]='KillPlayer' then
   begin
     gf:=true;
     mmmode:=true;
@@ -4139,7 +4371,7 @@ begin
     KillPlayer;
   end;
 
-  if fname='EndGame' then
+  if fname[cpn]='EndGame' then
   begin
     gf:=true;
     mmmode:=true;
@@ -4149,60 +4381,60 @@ begin
     ShowRequestForm(strarr[242],strarr[243],0,1,1,'');
   end;
 
-  if fname='GetPassable' then
+  if fname[cpn]='GetPassable' then
   begin
 
     gf:=true;
 
     //x
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     //var
-    sp[3]:=readnextword(stext,cp);
-    processparam(sp[3],3,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n3:=iv[ip[3]]
+    sp[3,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[3,cpn],3,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n3:=iv[ip[3,cpn]]
     else
-      n3:=rvi;
+      n3:=rvi[cpn];
 
     if cells[n1,n2].passable=true then iv[n3]:=1 else iv[n3]:=0;
 
     ModFreeSprite(n1);
   end;
 
-  if fname='ToggleWall' then
+  if fname[cpn]='ToggleWall' then
   begin
 
     gf:=true;
 
     //cell x
-    sp[1]:=readnextword(stext,cp);
-    processparam(sp[1],1,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n1:=iv[ip[1]]
+    sp[1,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[1,cpn],1,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n1:=iv[ip[1,cpn]]
     else
-      n1:=rvi;
+      n1:=rvi[cpn];
 
     //cell y
-    sp[2]:=readnextword(stext,cp);
-    processparam(sp[2],2,1);
-    if ((rvs='@') and (rvi=-1)) then
-      n2:=iv[ip[2]]
+    sp[2,cpn]:=readnextword(stext[cpn],cpn);
+    processparam(sp[2,cpn],2,1,cpn);
+    if ((rvs[cpn]='@') and (rvi[cpn]=-1)) then
+      n2:=iv[ip[2,cpn]]
     else
-      n2:=rvi;
+      n2:=rvi[cpn];
 
     if cells[n1,n2].wall=true then
     begin
@@ -4222,26 +4454,64 @@ begin
 
   if gf=true then
   begin
-    aname:='';
+    //ShowMessage(aname);
+    aname[cpn]:='';
   end;
+
+
+end;
+
+function arrangefreecp:integer;
+var i,j,k,fcp:integer;
+begin
+
+  j:=Length(cp);
+
+  if j=0 then
+  begin
+    SetLength(cp,1);
+    cp[0]:=-1;
+    j:=Length(cp);
+  end;
+
+  i:=0;
+  k:=0;
+  repeat
+    if cp[i]=-1 then k:=i else i:=i+1;
+  until (cp[i]=-1) or (i>=j-1);
+
+  if (i=j-1) and (k<>-1) then
+  begin
+    SetLength(cp,(Length(cp)+1));
+    j:=Length(cp);
+    i:=j-1;
+  end;
+
+  result:=i;
 
 end;
 
 
 procedure TForm1.readscript(st:string);
+var n:integer;
 begin
-  cp:=1;
-  aname:='';
-  repeat try
-    if (st[cp]<>' ') and (st[cp]<>#13) and (st[cp]<>#10) and (st[cp]<>';') and (st[cp]<>',') then
-    begin
-      aname:=aname+st[cp];
-      //ShowMessage('Curr aname: '+aname);
-      dofunc(aname);
-    end;
-    if st[cp]=';' then aname:='';
-    cp:=cp+1; except end;
-  until (cp>=length(st));
+  n:=arrangefreecp;
+  cp[n]:=1;
+  aname[n]:='';
+  stext[n]:=st;
+  repeat
+    try
+      if (st[cp[n]]<>' ') and (st[cp[n]]<>#13) and (st[cp[n]]<>#10) and (st[cp[n]]<>';') and (st[cp[n]]<>',') then
+      begin
+        aname[n]:=aname[n]+st[cp[n]];
+        //ShowMessage('Curr aname: '+aname);
+        dofunc(aname[n],n);
+      end;
+      if st[cp[n]]=';' then aname[n]:='';
+      cp[n]:=cp[n]+1;
+    except end;
+  until (cp[n]>=length(st));
+  cp[n]:=-1;
 end;
 
 
@@ -5255,7 +5525,7 @@ var i,acd:integer;
     e5s:integer;
     dp:string;
     hpcdrop:integer;
-
+    stxt:string;
 begin
 
    wascrit:=false;
@@ -5615,10 +5885,11 @@ begin
       if fileexists(gameexe+'\cards\'+inttostr(acd)+'_script.txt')=true then
       begin
         Memo1.Lines.LoadFromFile(gameexe+'\cards\'+inttostr(acd)+'_script.txt');
-        stext:=Memo1.Text;
+
+        stxt:=Memo1.Text;
         //ShowMessage('Reading script');
-        stext:=preparescript(stext);
-        readscript(stext);
+        stxt:=preparescript(stxt);
+        readscript(stxt);
       end;
 
       //returning data
@@ -6316,16 +6587,17 @@ begin
 end;  }
 
 procedure TForm1.PlayerSearch(x,y:integer);
+var stxt:string;
 begin
 
   //CELLSCRIPT
   if fileexists(gameexe+'\levels\'+mapid+'\sscript_'+inttostr(x)+'_'+inttostr(y)+'.txt') then
   begin
     Memo1.Lines.LoadFromFile(gameexe+'\levels\'+mapid+'\sscript_'+inttostr(x)+'_'+inttostr(y)+'.txt');
-    stext:=Memo1.Text;
+    stxt:=Memo1.Text;
     //ShowMessage('Reading script');
-    stext:=preparescript(stext);
-    readscript(stext);
+    stxt:=preparescript(stxt);
+    readscript(stxt);
   end;
 
   //player searches for hidden items or explores cell
@@ -6592,6 +6864,7 @@ var i:integer;
     rollx,rolly,rollz:boolean;
     mxa,mma:integer;
     tlend:boolean;
+    stxt:string;
 begin
 
   for i:=0 to 200 do with gfreemesh[i] do if (enabled=true) and (bhv<>0) then
@@ -6713,10 +6986,10 @@ begin
         if fileexists(gameexe+'\scripts\'+trscript+'.txt')=true then
         begin
           Memo1.Lines.LoadFromFile(gameexe+'\scripts\'+trscript+'.txt');
-          stext:=Memo1.Text;
+          stxt:=Memo1.Text;
           //ShowMessage('Reading script');
-          stext:=preparescript(stext);
-          readscript(stext);
+          stxt:=preparescript(stxt);
+          readscript(stxt);
         end;
 
     end;
@@ -7226,6 +7499,7 @@ var n,i:integer;
 begin
 
   d:=CheckJournalUnlocked(j);
+  n:=Length(jseq);
 
   if d=false then
   begin
@@ -7281,6 +7555,7 @@ begin
 end;
 
 procedure TForm1.NGLaunch;
+var stxt:string;
 begin
   gmmode:=true;
   chargen:=true;
@@ -7291,9 +7566,9 @@ begin
   if (fileexists(gameexe+'\scripts\startscript.txt')=true) and (loadinprogress=false) then
   begin
     Memo1.Lines.LoadFromFile(gameexe+'\scripts\startscript.txt');
-    stext:=Memo1.Text;
-    stext:=preparescript(stext);
-    readscript(stext);
+    stxt:=Memo1.Text;
+    stxt:=preparescript(stxt);
+    readscript(stxt);
   end;
   ShowRequestForm(strarr[89],'',0,0,0,'');
 end;
@@ -7315,11 +7590,14 @@ end;
 procedure TForm1.LoadGame;
 var i:integer;
 begin
+  cleargslist;
   with form2 do
   begin
     LoadMap(gameexe+'\saves\saved.map');
     player:=LoadChar(gameexe+'\saves\chsave1.sav');
     LoadJSeq(gameexe+'\saves\jseq.txt');
+    cleargslist;
+    try LoadGS(gameexe+'\saves\gslist.txt'); except end;
     LoadPlayer(gameexe+'\saves\chsave2.sav');
     form2.LoadSavedLight;
     defineparbonuses;
@@ -7358,7 +7636,7 @@ end;
 
 procedure TForm1.ClickGButton(id:integer);
 var pni,ii,hes:integer;
-    fpn,qjtext:string;
+    fpn,qjtext,stxt:string;
 begin
 
   if (rqform=false) or (id=40) or (id=41) or (id=42) or (id=43) or (id=44)
@@ -7561,7 +7839,7 @@ begin
   54:begin
        //open journal
        jspos:=0;
-       OpenJPos(0);
+       OpenJPos(jspos);
      end;
   55:begin
        //next jrn page
@@ -7788,10 +8066,10 @@ begin
        if fileexists(gameexe+'\scripts\'+afterch+'.txt')=true then
        begin
          Memo1.Lines.LoadFromFile(gameexe+'\scripts\'+afterch+'.txt');
-         stext:=Memo1.Text;
+         stxt:=Memo1.Text;
          //ShowMessage('Reading script');
-         stext:=preparescript(stext);
-         readscript(stext);
+         stxt:=preparescript(stxt);
+         readscript(stxt);
        end;
      end;
   41:begin
@@ -7802,10 +8080,10 @@ begin
        if fileexists(gameexe+'\scripts\'+afterch+'.txt')=true then
        begin
          Memo1.Lines.LoadFromFile(gameexe+'\scripts\'+afterch+'.txt');
-         stext:=Memo1.Text;
+         stxt:=Memo1.Text;
          //ShowMessage('Reading script');
-         stext:=preparescript(stext);
-         readscript(stext);
+         stxt:=preparescript(stxt);
+         readscript(stxt);
        end;
      end;
   42:begin
@@ -7816,10 +8094,10 @@ begin
        if fileexists(gameexe+'\scripts\'+afterch+'.txt')=true then
        begin
          Memo1.Lines.LoadFromFile(gameexe+'\scripts\'+afterch+'.txt');
-         stext:=Memo1.Text;
+         stxt:=Memo1.Text;
          //ShowMessage('Reading script');
-         stext:=preparescript(stext);
-         readscript(stext);
+         stxt:=preparescript(stxt);
+         readscript(stxt);
        end;
      end;
   43:begin
@@ -7830,10 +8108,10 @@ begin
        if fileexists(gameexe+'\scripts\'+afterch+'.txt')=true then
        begin
          Memo1.Lines.LoadFromFile(gameexe+'\scripts\'+afterch+'.txt');
-         stext:=Memo1.Text;
+         stxt:=Memo1.Text;
          //ShowMessage('Reading script');
-         stext:=preparescript(stext);
-         readscript(stext);
+         stxt:=preparescript(stxt);
+         readscript(stxt);
        end;
      end;
   44:begin
@@ -7844,10 +8122,10 @@ begin
        if fileexists(gameexe+'\scripts\'+afterch+'.txt')=true then
        begin
          Memo1.Lines.LoadFromFile(gameexe+'\scripts\'+afterch+'.txt');
-         stext:=Memo1.Text;
+         stxt:=Memo1.Text;
          //ShowMessage('Reading script');
-         stext:=preparescript(stext);
-         readscript(stext);
+         stxt:=preparescript(stxt);
+         readscript(stxt);
        end;
      end;
   45:begin
@@ -7858,10 +8136,10 @@ begin
        if fileexists(gameexe+'\scripts\'+afterch+'.txt')=true then
        begin
          Memo1.Lines.LoadFromFile(gameexe+'\scripts\'+afterch+'.txt');
-         stext:=Memo1.Text;
+         stxt:=Memo1.Text;
          //ShowMessage('Reading script');
-         stext:=preparescript(stext);
-         readscript(stext);
+         stxt:=preparescript(stxt);
+         readscript(stxt);
        end;
      end;
   46:begin
@@ -9881,7 +10159,9 @@ end;
 
 
 procedure TForm1.ExitGame;
+var err:boolean;
 begin
+
   try
     AlDeleteBuffers(1, @buffer1);
     AlDeleteSources(1, @source1);
@@ -9892,7 +10172,25 @@ begin
 
   end;
 
-  Application.Terminate;
+  wannaexit:=true;
+
+  try
+    cleargslist;
+  except end;
+
+  repeat
+    Application.ProcessMessages;
+  until (cdrstate=false);
+
+  repeat
+    try
+      Application.Terminate;
+      err:=false;
+    except
+      err:=true;
+    end;
+  until (err=false);
+
 end;
 
 
@@ -10023,6 +10321,9 @@ begin
   gameexe:=extractfiledir(Application.ExeName);
   ReadConfig;
 
+  setlength(cp,1);
+  cp[0]:=-1;
+
   for i:=0 to 1000 do //disabling all cards in deck
   begin
     deck[i].enabled:=false;
@@ -10048,8 +10349,8 @@ begin
   //form3.Edit2.Text:=celang;
 
   //ActiveSoundManager:=TGLSMWaveOut;
-  ActiveSoundManager.Active:=false;
-  GLSMWaveOut1.Active:=True;
+  //ActiveSoundManager.Active:=false;
+  //GLSMWaveOut1.Active:=True;
   lp:=2;
   //  mngName:='WaveOut'
   //else mngName:='';
@@ -10458,6 +10759,7 @@ end;
 procedure TForm1.ActivateCell(x,y:integer);
 var ccont,rspell,i,np:integer;
     done,doopen:boolean;
+    stxt:string;
 begin
 
 
@@ -10473,10 +10775,10 @@ begin
   if fileexists(gameexe+'\levels\'+mapid+'\script_'+inttostr(x)+'_'+inttostr(y)+'.txt') then
   begin
     Memo1.Lines.LoadFromFile(gameexe+'\levels\'+mapid+'\script_'+inttostr(x)+'_'+inttostr(y)+'.txt');
-    stext:=Memo1.Text;
+    stxt:=Memo1.Text;
     //ShowMessage('Reading script');
-    stext:=preparescript(stext);
-    readscript(stext);
+    stxt:=preparescript(stxt);
+    readscript(stxt);
   end;
 
   //OPEN DOOR
@@ -10767,6 +11069,7 @@ begin
     SaveMap(gameexe+'\saves\saved.map',false);
     SaveChar(Player,gameexe+'\saves\chsave1.sav');
     SavePlayer(gameexe+'\saves\chsave2.sav');
+    SaveGS(gameexe+'\saves\gslist.txt');
     SaveJSeq(gameexe+'\saves\jseq.txt');
     with form1.playerlight do
       form2.savelight(ConstAttenuation,LinearAttenuation,QuadraticAttenuation,
@@ -12473,6 +12776,16 @@ var i,j:integer;
     ii:integer;
     rfta:string;
 begin
+
+  if wannaexit=true then
+  begin
+    GLCadencer1.Enabled:=false;
+    exit;
+    ShowMessage('cadencer stopped');
+  end;
+
+  cdrstate:=true;
+
   //runs the cadencer procs
   err:='';
 
@@ -12512,6 +12825,13 @@ begin
   try
   if block1=true then
   begin
+
+     //GLOBALSCRIPTS
+     if (mmmode=false) and (loadinprogress=false) and (lip=false) then
+     begin
+       try processglobscripts;  except ShowMessage('error gs processing'); end;
+     end;
+
 
      //VISUALS
      //positioning camera
@@ -13762,6 +14082,8 @@ begin
   except  err:=err+' Render errors detected' end;
 
   If err<>'' then Form1.Caption:=err;
+
+  cdrstate:=false;
 
 end;
 

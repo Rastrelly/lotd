@@ -3,7 +3,7 @@ object Form14: TForm14
   Top = 0
   Caption = 'debugging and system editing'
   ClientHeight = 489
-  ClientWidth = 445
+  ClientWidth = 703
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -11,6 +11,7 @@ object Form14: TForm14
   Font.Name = 'Tahoma'
   Font.Style = []
   OldCreateOrder = False
+  OnClose = FormClose
   OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 13
@@ -415,5 +416,104 @@ object Form14: TForm14
       TabOrder = 7
       OnClick = Button8Click
     end
+  end
+  object GroupBox5: TGroupBox
+    Left = 447
+    Top = 8
+    Width = 249
+    Height = 424
+    Caption = 'global scripts'
+    TabOrder = 4
+    object ListBox2: TListBox
+      Left = 10
+      Top = 19
+      Width = 230
+      Height = 114
+      ItemHeight = 13
+      TabOrder = 0
+      OnClick = ListBox2Click
+    end
+    object stop: TButton
+      Left = 17
+      Top = 159
+      Width = 75
+      Height = 25
+      Caption = 'stop/run'
+      TabOrder = 1
+      OnClick = stopClick
+    end
+    object add: TButton
+      Left = 17
+      Top = 190
+      Width = 75
+      Height = 25
+      Caption = 'add'
+      TabOrder = 2
+      OnClick = addClick
+    end
+    object Edit10: TEdit
+      Left = 98
+      Top = 192
+      Width = 136
+      Height = 21
+      TabOrder = 3
+    end
+    object Button9: TButton
+      Left = 98
+      Top = 159
+      Width = 75
+      Height = 25
+      Caption = 'remove'
+      TabOrder = 4
+      OnClick = Button9Click
+    end
+    object Button10: TButton
+      Left = 179
+      Top = 159
+      Width = 56
+      Height = 25
+      Caption = 'refr.'
+      TabOrder = 5
+      OnClick = Button10Click
+    end
+    object Memo1: TMemo
+      Left = 10
+      Top = 221
+      Width = 230
+      Height = 194
+      ReadOnly = True
+      ScrollBars = ssVertical
+      TabOrder = 6
+    end
+    object CheckBox11: TCheckBox
+      Left = 17
+      Top = 136
+      Width = 97
+      Height = 17
+      Caption = 'active'
+      Enabled = False
+      TabOrder = 7
+    end
+  end
+  object GroupBox6: TGroupBox
+    Left = 447
+    Top = 432
+    Width = 249
+    Height = 49
+    Caption = 'script array control'
+    TabOrder = 5
+    object Label12: TLabel
+      Left = 16
+      Top = 24
+      Width = 138
+      Height = 13
+      Caption = 'cp array size {max 10000} ='
+    end
+  end
+  object Timer1: TTimer
+    Enabled = False
+    OnTimer = Timer1Timer
+    Left = 664
+    Top = 8
   end
 end

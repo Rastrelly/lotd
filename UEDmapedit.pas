@@ -222,6 +222,8 @@ type
     Label30: TLabel;
     Edit45: TEdit;
     ComboBox9: TComboBox;
+    procedure LoadGS(fn:string);
+    procedure SaveGS(fn:string);
     procedure LoadJSeq(fn:string);
     procedure SaveJSeq(fn:string);
     procedure PasteToArea;
@@ -1617,6 +1619,44 @@ begin
   Result:=rs;
 end;
 
+procedure TForm2.LoadGS(fn:string);
+var i,n:integer;
+    sta:array[0..10000]of string;
+begin
+  Form1.Memo1.Lines.Clear;
+  Form1.Memo1.Lines.LoadFromFile(fn);
+  n:=Form1.Memo1.Lines.Count;
+  if n>10001 then n:=10001;
+  for i:=0 to n-1 do sta[i]:=form1.Memo1.Lines[i];
+
+  if n>0 then
+  begin
+    //SetLength(gs,n);
+    for i:=0 to n-1 do
+    begin
+      try
+        //ShowMessage('adding global script '+form1.memo1.Lines[i]+'... ('+inttostr(i)+'/'+inttostr(n-1)+')');
+        if fileexists(gameexe+'\scripts\'+sta[i]+'.txt') then
+          Form1.addglobscript(sta[i]);
+      except {showmessage('error adding global script '+form1.memo1.Lines[i])} end;
+    end;
+  end;
+
+end;
+
+procedure TForm2.SaveGS(fn:string);
+var i,n:integer;
+begin
+  Form1.Memo1.Lines.Clear;
+  n:=Length(gs);
+  if n>0 then
+  for i:=0 to n-1 do
+  begin
+    form1.memo1.lines.add(gs[i].id);
+  end;
+  Form1.Memo1.Lines.SaveToFile(fn);
+end;
+
 procedure TForm2.SavePlayer(fn:string);
 var i,j:integer;
 begin
@@ -1678,6 +1718,7 @@ begin
   addint(fdc);
   addint(ahat);
   Form1.Memo1.Lines.SaveToFile(fn);
+
   lip:=false;
 end;
 

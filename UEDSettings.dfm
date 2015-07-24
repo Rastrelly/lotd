@@ -407,7 +407,7 @@ object Form5: TForm5
     end
     object Label8: TLabel
       Left = 44
-      Top = 81
+      Top = 77
       Width = 63
       Height = 13
       Caption = 'Music volume'
@@ -422,7 +422,7 @@ object Form5: TForm5
     end
     object TrackBar3: TTrackBar
       Left = 16
-      Top = 43
+      Top = 39
       Width = 193
       Height = 45
       Max = 100
@@ -431,7 +431,7 @@ object Form5: TForm5
     end
     object TrackBar4: TTrackBar
       Left = 16
-      Top = 100
+      Top = 94
       Width = 193
       Height = 29
       Max = 100
@@ -544,13 +544,14 @@ object Form5: TForm5
       Top = 14
       Width = 117
       Height = 37
-      Min = -10
+      Max = 5
+      Min = -3
       TabOrder = 3
       OnChange = TrackBar7Change
     end
     object CheckBox5: TCheckBox
       Left = 13
-      Top = 66
+      Top = 67
       Width = 148
       Height = 17
       Caption = 'Auto increase deck'

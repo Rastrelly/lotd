@@ -55,6 +55,19 @@ type
     Edit9: TEdit;
     Label11: TLabel;
     Button8: TButton;
+    GroupBox5: TGroupBox;
+    ListBox2: TListBox;
+    stop: TButton;
+    add: TButton;
+    Button9: TButton;
+    Button10: TButton;
+    Edit10: TEdit;
+    Memo1: TMemo;
+    CheckBox11: TCheckBox;
+    GroupBox6: TGroupBox;
+    Label12: TLabel;
+    Timer1: TTimer;
+    procedure buildgslist;
     procedure FormShow(Sender: TObject);
     procedure CheckBox1Click(Sender: TObject);
     procedure CheckBox2Click(Sender: TObject);
@@ -77,6 +90,13 @@ type
     procedure Edit8Change(Sender: TObject);
     procedure Edit9Change(Sender: TObject);
     procedure Button8Click(Sender: TObject);
+    procedure Button10Click(Sender: TObject);
+    procedure stopClick(Sender: TObject);
+    procedure Button9Click(Sender: TObject);
+    procedure addClick(Sender: TObject);
+    procedure ListBox2Click(Sender: TObject);
+    procedure Timer1Timer(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
   private
     { Private declarations }
   public
@@ -89,6 +109,31 @@ var
 implementation
 
 {$R *.dfm}
+
+procedure TForm14.addClick(Sender: TObject);
+begin
+  Form1.addglobscript(Edit10.Text);
+  buildgslist;
+end;
+
+procedure tform14.buildgslist;
+var i,n:integer;
+begin
+  n:=Length(gs);
+  ListBox2.Clear;
+  if n>0 then
+  with ListBox2.Items do
+  for i:=0 to n-1 do
+  begin
+    Add(gs[i].id);
+  end;
+
+end;
+
+procedure TForm14.Button10Click(Sender: TObject);
+begin
+  buildgslist;
+end;
 
 procedure TForm14.Button1Click(Sender: TObject);
 begin
@@ -201,6 +246,11 @@ begin
   Button6.Click;
 end;
 
+procedure TForm14.Button9Click(Sender: TObject);
+begin
+  form1.removeglobscript(ListBox2.Items[ListBox2.ItemIndex]);
+end;
+
 procedure TForm14.CheckBox1Click(Sender: TObject);
 begin
   block1:=CheckBox1.Checked;
@@ -261,6 +311,11 @@ begin
   try alitms[ListBox1.ItemIndex].size2:=strtoint(Edit8.Text); except end;
 end;
 
+procedure TForm14.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  Timer1.Enabled:=false;
+end;
+
 procedure TForm14.FormShow(Sender: TObject);
 begin
   checkbox1.Checked:=block1;
@@ -275,6 +330,10 @@ begin
   LabeledEdit1.Text:=IntToStr(levelsteps);
   LabeledEdit1.Text:=IntToStr(level);
 
+  buildgslist;
+
+  timer1.Enabled:=true;
+
 end;
 
 procedure TForm14.ListBox1Click(Sender: TObject);
@@ -283,6 +342,35 @@ begin
   edit7.Text:=inttostr(alitms[ListBox1.ItemIndex].purpose);
   edit8.Text:=inttostr(alitms[ListBox1.ItemIndex].size);
   edit9.Text:=inttostr(alitms[ListBox1.ItemIndex].size2);
+end;
+
+procedure TForm14.ListBox2Click(Sender: TObject);
+begin
+  try
+    Memo1.Text:=gs[ListBox2.ItemIndex].text;
+    CheckBox11.Checked:=gs[ListBox2.ItemIndex].active;
+    CheckBox11.Caption:='active';
+  except
+    Memo1.Clear;
+    CheckBox11.Checked:=false;
+    CheckBox11.Caption:='n/a';
+  end;
+end;
+
+procedure TForm14.stopClick(Sender: TObject);
+begin
+  if gs[ListBox2.ItemIndex].active=true then
+    form1.stopglobscript(ListBox2.Items[ListBox2.ItemIndex])
+  else
+    form1.runglobscript(ListBox2.Items[ListBox2.ItemIndex]);
+end;
+
+procedure TForm14.Timer1Timer(Sender: TObject);
+begin
+  if Form14.Visible=true then
+  begin
+    Label12.Caption:='cp array size {max 10000} = '+inttostr(Length(cp));
+  end;
 end;
 
 end.
